@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -68,7 +67,6 @@ const SymptomChecker = () => {
     document.title = "AI Symptom Checker | ArogyaAI+";
   }, []);
 
-  // Function to simulate speech recognition
   const toggleListening = () => {
     if (isListening) {
       setIsListening(false);
@@ -83,7 +81,6 @@ const SymptomChecker = () => {
         description: "Please describe your symptoms clearly.",
       });
       
-      // Simulate speech recognition after 3 seconds
       setTimeout(() => {
         setIsListening(false);
         setSymptoms(prevSymptoms => prevSymptoms + 
@@ -98,7 +95,6 @@ const SymptomChecker = () => {
     }
   };
 
-  // Mock AI diagnosis function
   const analyzeSymptomsWithAI = () => {
     if (!symptoms.trim()) {
       toast({
@@ -111,9 +107,7 @@ const SymptomChecker = () => {
 
     setIsLoading(true);
 
-    // Simulate API call delay
     setTimeout(() => {
-      // Mock diagnosis result
       const mockResult: DiagnosisResult = {
         possibleConditions: [
           {
@@ -332,14 +326,14 @@ const SymptomChecker = () => {
                         </div>
                         <Progress 
                           value={condition.probability} 
-                          className="h-2 mb-4" 
-                          indicatorClassName={
+                          className={cn(
+                            "h-2 mb-4",
                             condition.probability > 70 
-                              ? "bg-health-red" 
+                              ? "bg-secondary [&>div]:bg-health-red" 
                               : condition.probability > 40 
-                                ? "bg-health-orange" 
-                                : "bg-health-green"
-                          }
+                                ? "bg-secondary [&>div]:bg-health-orange" 
+                                : "bg-secondary [&>div]:bg-health-green"
+                          )}
                         />
                         <p className="text-sm text-muted-foreground mb-3">
                           {condition.description}

@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,7 +14,8 @@ import {
   Mic, 
   MicOff, 
   Info, 
-  AlertCircle, 
+  AlertCircle,
+  AlertTriangle,
   RefreshCw,
   Bot 
 } from "lucide-react";
@@ -42,7 +42,6 @@ const MentalHealth = () => {
   useEffect(() => {
     document.title = "Mental Health Support | ArogyaAI+";
     
-    // Add welcome message
     setMessages([
       {
         id: "welcome",
@@ -53,12 +52,10 @@ const MentalHealth = () => {
     ]);
   }, []);
 
-  // Scroll to bottom whenever messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Toggle voice input
   const toggleListening = () => {
     if (isListening) {
       setIsListening(false);
@@ -73,7 +70,6 @@ const MentalHealth = () => {
         description: "Speak clearly to share how you're feeling.",
       });
       
-      // Simulate speech recognition after 3 seconds
       setTimeout(() => {
         setIsListening(false);
         setInput("I've been feeling anxious lately and having trouble sleeping.");
@@ -85,12 +81,10 @@ const MentalHealth = () => {
     }
   };
 
-  // Generate a unique ID for messages
   const generateId = () => {
     return Math.random().toString(36).substring(2, 15);
   };
 
-  // Send message
   const sendMessage = () => {
     if (!input.trim()) return;
     
@@ -105,7 +99,6 @@ const MentalHealth = () => {
     setInput("");
     setIsLoading(true);
     
-    // Simulate AI response delay
     setTimeout(() => {
       const responses = [
         "I understand that anxiety and sleep issues can be really challenging. Many people experience similar struggles. Have you noticed any specific triggers for your anxiety recently?",
@@ -129,7 +122,6 @@ const MentalHealth = () => {
     }, 2000);
   };
 
-  // Handle key press
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -137,12 +129,10 @@ const MentalHealth = () => {
     }
   };
 
-  // Format timestamp
   const formatTime = (date: Date) => {
     return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   };
 
-  // Reset chat
   const resetChat = () => {
     setMessages([
       {
@@ -439,7 +429,6 @@ const MentalHealth = () => {
   );
 };
 
-// These are components that are used in the Mental Health component but need to be imported
 function CalendarDays(props: any) {
   return (
     <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
