@@ -36,6 +36,7 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/use-toast";
+import { cn } from "@/lib/utils";
 
 interface Condition {
   name: string;
