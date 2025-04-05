@@ -8,6 +8,7 @@ import { Layout } from "@/components/Layout";
 import Index from "@/pages/Index";
 import SymptomChecker from "@/pages/SymptomChecker";
 import MentalHealth from "@/pages/MentalHealth";
+import MentalHealthCompanion from "@/pages/MentalHealthCompanion";
 import NotFound from "@/pages/NotFound";
 import { StrictMode } from "react";
 
@@ -33,6 +34,7 @@ const App = () => (
               <Route index element={<Index />} />
               <Route path="symptom-checker" element={<SymptomChecker />} />
               <Route path="mental-health" element={<MentalHealth />} />
+              <Route path="mental-health-companion" element={<MentalHealthCompanion />} />
               <Route path="*" element={<NotFound />} />
             </Route>
           </Routes>
