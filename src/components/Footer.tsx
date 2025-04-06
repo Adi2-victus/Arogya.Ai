@@ -1,4 +1,3 @@
-
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { Facebook, Twitter, Instagram, Linkedin, Mail } from "lucide-react";
@@ -20,6 +19,7 @@ export function Footer() {
       title: "Services",
       items: [
         { name: "AI Doctor", href: "/symptom-checker" },
+        { name: "Report Analyzer", href: "/report-analyzer" },
         { name: "Mental Health", href: "/mental-health" },
         { name: "Teleconsultation", href: "/teleconsultation" },
         { name: "Health Resources", href: "/resources" },

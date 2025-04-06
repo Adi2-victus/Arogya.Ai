@@ -1,4 +1,3 @@
-
 import { cn } from "@/lib/utils";
 import { 
   MessageSquare, 
@@ -8,7 +7,9 @@ import {
   Heart, 
   AlertTriangle,
   MapPin, 
-  BarChart
+  BarChart,
+  Users,
+  Clock
 } from "lucide-react";
 
 interface FeatureCardProps {
@@ -60,16 +61,16 @@ export function FeatureSection() {
       delay: "300ms"
     },
     {
-      title: "Appointment Scheduling",
-      description: "Book teleconsultations with healthcare professionals at your convenience.",
+      title: "Smart Appointment Scheduling",
+      description: "Book appointments with doctors using our AI-powered scheduling system with instant confirmation.",
       icon: <Calendar className="h-5 w-5" />,
       colorClass: "bg-health-blue-light text-health-blue",
       delay: "400ms"
     },
     {
-      title: "Health Metrics Dashboard",
-      description: "Monitor vital signs, track progress, and visualize your health journey over time.",
-      icon: <BarChart className="h-5 w-5" />,
+      title: "Nearby Doctors in Pune",
+      description: "Find top healthcare specialists in Pune with ratings, availability, and direct booking options.",
+      icon: <MapPin className="h-5 w-5" />,
       colorClass: "bg-health-green-light text-health-green",
       delay: "500ms"
     },
@@ -90,7 +91,7 @@ export function FeatureSection() {
     {
       title: "Local Health Resources",
       description: "Find nearby hospitals, clinics, pharmacies, and emergency services when needed.",
-      icon: <MapPin className="h-5 w-5" />,
+      icon: <Users className="h-5 w-5" />,
       colorClass: "bg-health-blue-light text-health-blue",
       delay: "800ms"
     }

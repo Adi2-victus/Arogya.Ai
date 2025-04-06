@@ -1,11 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { 
   Card, 
-  CardContent, 
-  CardDescription, 
+  CardContent,
   CardFooter, 
   CardHeader, 
   CardTitle 
@@ -15,58 +13,100 @@ import {
   Mic, 
   MicOff, 
   Send, 
-  Clock, 
-  Activity, 
-  AlertTriangle, 
-  Search, 
-  Info 
+  Bot,
+  User,
+  Loader2,
+  ChevronDown, 
+  HelpCircle,
+  Info,
+  Brain
 } from "lucide-react";
-import { 
-  Tabs, 
-  TabsContent, 
-  TabsList, 
-  TabsTrigger 
-} from "@/components/ui/tabs";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
-import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/components/ui/use-toast";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Separator } from "@/components/ui/separator";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { SymptomDetectionService } from "@/services/symptomDetection";
 
-interface Condition {
-  name: string;
-  probability: number;
-  description: string;
-  symptoms: string[];
-  recommendation: string;
-}
-
-interface DiagnosisResult {
-  possibleConditions: Condition[];
-  riskFactors: {
-    age: string;
-    region: string;
-    medicalHistory: string;
+interface Message {
+  id: string;
+  content: string;
+  role: 'user' | 'assistant';
+  timestamp: Date;
+  isLoading?: boolean;
+  analysis?: {
+    conditions: {
+      name: string;
+      confidence: number;
+      description: string;
+      recommendations: string[];
+      urgency?: "high" | "medium" | "low";
+    }[];
+    modelUsed?: string;
   };
-  urgency: "low" | "medium" | "high";
-  nextSteps: string[];
 }
 
 const SymptomChecker = () => {
-  const [symptoms, setSymptoms] = useState("");
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      id: "welcome",
+      content: "Hello! I'm your AI health assistant. Please describe your symptoms, and I'll analyze them to provide a preliminary assessment. Remember to include details like when symptoms started, their severity, and your age for more accurate results.",
+      role: "assistant",
+      timestamp: new Date(),
+    }
+  ]);
+  const [inputValue, setInputValue] = useState("");
   const [isListening, setIsListening] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [diagnosisResult, setDiagnosisResult] = useState<DiagnosisResult | null>(null);
+  const [isAIServiceAvailable, setIsAIServiceAvailable] = useState<boolean>(true);
+  const [aiModelInfo, setAiModelInfo] = useState<string | undefined>(undefined);
   const { toast } = useToast();
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   
   useEffect(() => {
     document.title = "AI Symptom Checker | ArogyaAI+";
-  }, []);
+    
+    // Check AI service health on component mount
+    const checkAIServiceHealth = async () => {
+      try {
+        const healthStatus = await SymptomDetectionService.checkHealth();
+        setIsAIServiceAvailable(healthStatus.aiServiceAvailable);
+        setAiModelInfo(healthStatus.modelVersion);
+        
+        if (healthStatus.aiServiceAvailable) {
+          console.log("AI health service available:", healthStatus.modelVersion);
+        } else {
+          console.warn("AI health service unavailable, using fallback");
+          toast({
+            variant: "destructive",
+            title: "Basic Analysis Mode",
+            description: "AI service not available. Using basic analysis only.",
+          });
+        }
+      } catch (error) {
+        console.error('Failed to check AI service health:', error);
+        setIsAIServiceAvailable(false);
+      }
+    };
+    
+    checkAIServiceHealth();
+  }, [toast]);
+
+  // Scroll to bottom whenever messages change
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  const generateUniqueId = () => {
+    return Date.now().toString(36) + Math.random().toString(36).substring(2);
+  };
 
   const toggleListening = () => {
     if (isListening) {
@@ -82,12 +122,10 @@ const SymptomChecker = () => {
         description: "Please describe your symptoms clearly.",
       });
       
+      // Simulate voice recognition (in a real app, this would use the Web Speech API)
       setTimeout(() => {
         setIsListening(false);
-        setSymptoms(prevSymptoms => prevSymptoms + 
-          (prevSymptoms ? " " : "") + 
-          "I've been having a persistent dry cough for the past 3 days with mild fever and fatigue."
-        );
+        setInputValue("I've been experiencing persistent headaches and dizziness for the past 3 days. I also feel a bit nauseous, especially in the morning. I'm 35 years old.");
         toast({
           title: "Voice recording completed",
           description: "Your symptoms have been captured.",
@@ -96,392 +134,360 @@ const SymptomChecker = () => {
     }
   };
 
-  const analyzeSymptomsWithAI = () => {
-    if (!symptoms.trim()) {
+  const sendMessage = async () => {
+    if (!inputValue.trim()) return;
+    
+    const userMessageId = generateUniqueId();
+    const aiResponseId = generateUniqueId();
+    
+    // Add user message
+    const userMessage: Message = {
+      id: userMessageId,
+      content: inputValue,
+      role: "user",
+      timestamp: new Date(),
+    };
+    
+    // Add AI message with loading state
+    const loadingMessage: Message = {
+      id: aiResponseId,
+      content: "",
+      role: "assistant",
+      timestamp: new Date(),
+      isLoading: true,
+    };
+    
+    setMessages(prev => [...prev, userMessage, loadingMessage]);
+    setInputValue("");
+    
+    // Focus input field again
+    inputRef.current?.focus();
+    
+    try {
+      // Extract age if present
+      const age = extractAgeFromText(inputValue);
+      
+      // Request analysis from symptom detection service
+      const result = await SymptomDetectionService.analyzeSymptoms(inputValue, { age });
+      
+      // Generate conversational response based on analysis
+      let response = generateConversationalResponse(result, inputValue);
+      
+      // Update AI message with response and analysis data
+      setMessages(prev => 
+        prev.map(msg => 
+          msg.id === aiResponseId 
+            ? {
+                ...msg, 
+                content: response, 
+                isLoading: false,
+                analysis: {
+                  conditions: result.results,
+                  modelUsed: result.modelUsed
+                }
+              }
+            : msg
+        )
+      );
+    } catch (error) {
+      console.error('Error analyzing symptoms:', error);
+      
+      // Update AI message with error
+      setMessages(prev => 
+        prev.map(msg => 
+          msg.id === aiResponseId 
+            ? {
+                ...msg, 
+                content: "I'm sorry, I encountered an error while analyzing your symptoms. Please try again or describe your symptoms differently.", 
+                isLoading: false 
+              }
+            : msg
+        )
+      );
+      
       toast({
         variant: "destructive",
-        title: "Error",
-        description: "Please describe your symptoms first.",
+        title: "Analysis Failed",
+        description: "Unable to analyze symptoms. Please try again.",
       });
-      return;
     }
+  };
 
-    setIsLoading(true);
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  };
 
-    setTimeout(() => {
-      const mockResult: DiagnosisResult = {
-        possibleConditions: [
-          {
-            name: "Common Cold",
-            probability: 75,
-            description: "A viral infection of the upper respiratory tract that typically resolves within 7-10 days.",
-            symptoms: ["Cough", "Mild fever", "Fatigue", "Sore throat", "Runny nose"],
-            recommendation: "Rest, stay hydrated, and take over-the-counter cold medicine if needed."
-          },
-          {
-            name: "COVID-19",
-            probability: 45,
-            description: "A respiratory illness caused by the SARS-CoV-2 virus with varying severity.",
-            symptoms: ["Cough", "Fever", "Fatigue", "Shortness of breath", "Loss of taste/smell"],
-            recommendation: "Consider getting tested and isolate until results are received."
-          },
-          {
-            name: "Seasonal Flu",
-            probability: 30,
-            description: "A contagious respiratory illness caused by influenza viruses.",
-            symptoms: ["Fever", "Cough", "Fatigue", "Body aches", "Sore throat"],
-            recommendation: "Rest, stay hydrated, and consult a doctor if symptoms worsen."
-          }
-        ],
-        riskFactors: {
-          age: "Medium risk based on typical adult profile",
-          region: "Elevated risk due to current flu season in your area",
-          medicalHistory: "Insufficient data provided"
-        },
-        urgency: "medium",
-        nextSteps: [
-          "Monitor your symptoms for the next 24-48 hours",
-          "Stay hydrated and get plenty of rest",
-          "Take over-the-counter fever reducers if needed",
-          "If symptoms worsen or persist beyond 5 days, consult with a healthcare professional",
-          "Consider scheduling a teleconsultation for further evaluation"
-        ]
-      };
-      
-      setDiagnosisResult(mockResult);
-      setIsLoading(false);
-      
-      toast({
-        title: "Analysis Complete",
-        description: "Your symptoms have been analyzed by our AI.",
-      });
-    }, 3000);
+  // Helper function to generate conversational response based on analysis
+  const generateConversationalResponse = (result: any, userInput: string) => {
+    if (!result || !result.results || result.results.length === 0) {
+      return "I couldn't identify specific conditions based on the symptoms you described. Could you provide more details about what you're experiencing?";
+    }
+    
+    const conditions = result.results;
+    const topCondition = conditions[0];
+    const urgency = getUrgencyLevel(conditions);
+    
+    let response = "";
+    
+    // Opening remarks based on input
+    response += getOpeningRemarks(userInput) + " ";
+    
+    // Main analysis
+    response += `Based on your symptoms, I think you may be experiencing **${topCondition.condition}** (${topCondition.confidence}% confidence). ${topCondition.description}\n\n`;
+    
+    // Add recommendations
+    response += "**Recommendations:**\n";
+    topCondition.recommendations.forEach(rec => {
+      response += `- ${rec}\n`;
+    });
+    
+    // Mention other possible conditions if present
+    if (conditions.length > 1) {
+      response += "\nI've also identified other potential conditions that match your symptoms:\n";
+      for (let i = 1; i < Math.min(conditions.length, 3); i++) {
+        response += `- **${conditions[i].condition}** (${conditions[i].confidence}% confidence)\n`;
+      }
+    }
+    
+    // Urgency notice
+    if (urgency === "high") {
+      response += "\n⚠️ **Some of these symptoms may require urgent medical attention. Please consider consulting a healthcare provider soon.**";
+    } else if (urgency === "medium") {
+      response += "\n**Consider scheduling a doctor's appointment if symptoms persist or worsen.**";
+    } else {
+      response += "\n**Monitor your symptoms and rest. If they persist for more than a few days, consider consulting a healthcare provider.**";
+    }
+    
+    // Disclaimer
+    response += "\n\n*Remember: This is not a medical diagnosis. Always consult with healthcare professionals for proper medical advice.*";
+    
+    return response;
+  };
+  
+  const getOpeningRemarks = (input: string) => {
+    const remarks = [
+      "I've analyzed your symptoms.",
+      "Thank you for providing those details.",
+      "I've reviewed the symptoms you described.",
+      "Based on the information you've shared,",
+      "After analyzing your symptoms,"
+    ];
+    
+    return remarks[Math.floor(Math.random() * remarks.length)];
+  };
+  
+  const getUrgencyLevel = (conditions: any[]): "low" | "medium" | "high" => {
+    if (!conditions || conditions.length === 0) return "low";
+    
+    // Check if any condition has high urgency
+    for (const condition of conditions) {
+      if (condition.urgency === "high") return "high";
+    }
+    
+    // Check if any of the top 3 conditions has medium urgency
+    for (let i = 0; i < Math.min(conditions.length, 3); i++) {
+      if (conditions[i].urgency === "medium") return "medium";
+    }
+    
+    return "low";
+  };
+
+  const extractAgeFromText = (text: string): number | undefined => {
+    // This regex looks for patterns like "I am 34", "I'm 34 years old", etc.
+    const agePatterns = [
+      /\b(?:I am|I'm)\s+(\d{1,3})(?:\s+years?\s+old)?\b/i,
+      /\bage(?:\s+(?:is|of))?\s+(\d{1,3})\b/i,
+      /\b(\d{1,3})(?:\s+years?\s+old)\b/i,
+    ];
+    
+    for (const pattern of agePatterns) {
+      const match = text.match(pattern);
+      if (match && match[1]) {
+        const age = parseInt(match[1], 10);
+        if (age > 0 && age < 120) { // Sanity check
+          return age;
+        }
+      }
+    }
+    
+    return undefined;
+  };
+
+  const getUrgencyBadge = (urgency?: "high" | "medium" | "low") => {
+    if (!urgency) return null;
+    
+    const colors = {
+      high: "bg-red-500 text-white",
+      medium: "bg-yellow-500 text-white",
+      low: "bg-green-500 text-white"
+    };
+    
+    return (
+      <Badge className={colors[urgency]}>
+        {urgency === "high" ? "Urgent" : urgency === "medium" ? "Moderate" : "Low"} Priority
+      </Badge>
+    );
+  };
+
+  const renderMessage = (message: Message) => {
+    const isUser = message.role === 'user';
+    
+    return (
+      <div 
+        key={message.id} 
+        className={cn(
+          "py-6",
+          isUser ? "bg-background" : "bg-muted/50"
+        )}
+      >
+        <div className="container max-w-4xl flex gap-4 items-start">
+          <Avatar className={cn("mt-1", isUser ? "bg-primary" : "bg-health-green")}>
+            <AvatarFallback>
+              {isUser ? <User size={18} /> : <Bot size={18} />}
+            </AvatarFallback>
+          </Avatar>
+          
+          <div className="flex-1 space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="font-semibold">
+                {isUser ? "You" : "AI Health Assistant"}
+              </span>
+              
+              {!isUser && message.analysis?.modelUsed && (
+                <Badge variant="outline" className="text-xs px-2 py-0 h-5 bg-blue-50 text-blue-700 border-blue-200">
+                  <Brain size={12} className="mr-1" />
+                  {message.analysis.modelUsed}
+                </Badge>
+              )}
+              
+              {message.analysis?.conditions?.[0]?.urgency && !isUser && (
+                getUrgencyBadge(message.analysis.conditions[0].urgency)
+              )}
+            </div>
+            
+            {message.isLoading ? (
+              <div className="flex items-center gap-2">
+                <Loader2 size={18} className="animate-spin text-muted-foreground" />
+                <span className="text-muted-foreground">Analyzing symptoms...</span>
+              </div>
+            ) : (
+              <div className="prose prose-sm max-w-none">
+                {message.content.split('\n').map((text, index) => (
+                  <p key={index} className={text.startsWith('**') ? 'font-semibold' : ''}>
+                    {text.replace(/\*\*(.*?)\*\*/g, '$1')}
+                  </p>
+                ))}
+              </div>
+            )}
+            
+            {!isUser && message.analysis?.conditions && message.analysis.conditions.length > 0 && (
+              <div className="mt-4">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="text-sm">
+                      <Info className="mr-2 h-4 w-4" /> View Detailed Analysis
+                      <ChevronDown className="ml-2 h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="w-72" align="start">
+                    {message.analysis.conditions.map((condition, index) => (
+                      <DropdownMenuItem key={index} className="flex flex-col items-start py-2">
+                        <div className="w-full">
+                          <div className="flex justify-between items-center mb-1">
+                            <span className="font-medium">{condition.name}</span>
+                            <span className="text-xs">{condition.confidence}%</span>
+                          </div>
+                          <div className="w-full bg-secondary h-1.5 rounded-full">
+                            <div 
+                              className={cn(
+                                "h-full rounded-full",
+                                condition.confidence > 75 ? "bg-red-500" :
+                                condition.confidence > 50 ? "bg-yellow-500" :
+                                "bg-green-500"
+                              )}
+                              style={{ width: `${condition.confidence}%` }}
+                            />
+                          </div>
+                          <p className="text-xs mt-1 text-muted-foreground">{condition.description}</p>
+                        </div>
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
   };
 
   return (
-    <div className="container py-8 px-4 md:px-6 max-w-6xl">
-      <div className="flex flex-col space-y-4 mb-8">
-        <h1 className="text-3xl font-bold">AI Symptom Checker</h1>
-        <p className="text-muted-foreground">
-          Describe your symptoms in detail, and our AI will analyze them to provide a preliminary assessment.
-        </p>
+    <div className="flex flex-col h-[calc(100vh-4rem)]">
+      <div className="container py-4 border-b">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">AI Symptom Checker</h1>
+            <p className="text-sm text-muted-foreground">
+              Describe your symptoms for AI-powered health assessment
+            </p>
+          </div>
+          {isAIServiceAvailable && aiModelInfo && (
+            <Badge className="bg-health-green text-white">
+              <Brain className="mr-1 h-4 w-4" />
+              Powered by {aiModelInfo}
+            </Badge>
+          )}
+        </div>
       </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="lg:col-span-2 shadow-md">
-          <CardHeader>
-            <CardTitle>Describe Your Symptoms</CardTitle>
-            <CardDescription>
-              Include when they started, their severity, and any other relevant information.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <Textarea
-                placeholder="Example: I've been experiencing a persistent headache for the past 2 days, along with fatigue and mild fever..."
-                className="min-h-[150px]"
-                value={symptoms}
-                onChange={(e) => setSymptoms(e.target.value)}
-              />
-              <div className="flex items-center text-sm text-muted-foreground">
-                <Info size={16} className="mr-2" />
-                <span>For accurate results, please be as detailed as possible about your symptoms.</span>
-              </div>
-            </div>
-          </CardContent>
-          <CardFooter className="flex flex-col space-y-4 sm:flex-row sm:space-y-0 sm:justify-between">
-            <Button 
-              variant="outline" 
+      
+      <div className="flex-1 overflow-hidden">
+        <ScrollArea className="h-full pt-4 pb-0">
+          {messages.map(renderMessage)}
+          <div ref={messagesEndRef} />
+        </ScrollArea>
+      </div>
+      
+      <div className="border-t p-4">
+        <div className="container max-w-4xl">
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="icon"
               onClick={toggleListening}
-              className={isListening ? "bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50" : ""}
-              disabled={isLoading}
+              className={isListening ? "bg-red-100 text-red-500 border-red-200" : ""}
             >
-              {isListening ? (
-                <>
-                  <MicOff className="mr-2 h-4 w-4" /> Stop Recording
-                </>
-              ) : (
-                <>
-                  <Mic className="mr-2 h-4 w-4" /> Record Symptoms
-                </>
-              )}
+              {isListening ? <MicOff /> : <Mic />}
             </Button>
-            <Button 
-              onClick={analyzeSymptomsWithAI} 
-              disabled={isLoading || !symptoms.trim()}
-              className="w-full sm:w-auto"
-            >
-              {isLoading ? (
-                <>
-                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Analyzing...
-                </>
-              ) : (
-                <>
-                  <Send className="mr-2 h-4 w-4" /> Analyze Symptoms
-                </>
-              )}
-            </Button>
-          </CardFooter>
-        </Card>
-
-        <Card className="shadow-md">
-          <CardHeader>
-            <CardTitle>How It Works</CardTitle>
-            <CardDescription>
-              Our AI uses advanced NLP to analyze your symptoms
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-start space-x-3">
-              <div className="bg-health-blue-light text-health-blue rounded-full p-2 mt-1">
-                <Search size={16} />
-              </div>
-              <div>
-                <h4 className="font-medium">Symptom Analysis</h4>
-                <p className="text-sm text-muted-foreground">
-                  Our AI processes your symptoms using natural language understanding.
-                </p>
-              </div>
+            
+            <div className="relative flex-1">
+              <Input
+                ref={inputRef}
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Describe your symptoms (e.g., 'I have a headache and fever for 2 days')"
+                className="pr-20"
+                disabled={messages.some(m => m.isLoading)}
+              />
+              <Button
+                className="absolute right-1 top-1 h-8"
+                size="sm"
+                onClick={sendMessage}
+                disabled={!inputValue.trim() || messages.some(m => m.isLoading)}
+              >
+                <Send className="h-4 w-4" />
+              </Button>
             </div>
-            <div className="flex items-start space-x-3">
-              <div className="bg-health-green-light text-health-green rounded-full p-2 mt-1">
-                <Activity size={16} />
-              </div>
-              <div>
-                <h4 className="font-medium">Pattern Matching</h4>
-                <p className="text-sm text-muted-foreground">
-                  Compares your symptoms against thousands of medical conditions.
-                </p>
-              </div>
-            </div>
-            <div className="flex items-start space-x-3">
-              <div className="bg-health-orange-light text-health-orange rounded-full p-2 mt-1">
-                <AlertCircle size={16} />
-              </div>
-              <div>
-                <h4 className="font-medium">Risk Assessment</h4>
-                <p className="text-sm text-muted-foreground">
-                  Evaluates urgency based on symptoms, age, and regional factors.
-                </p>
-              </div>
-            </div>
-            <div className="border-t border-border pt-4 text-center">
-              <p className="text-sm text-muted-foreground">
-                <AlertTriangle size={14} className="inline mr-1" />
-                This is not a replacement for professional medical advice.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {diagnosisResult && (
-        <div className="mt-8 animate-in">
-          <Card className="shadow-md">
-            <CardHeader className="border-b">
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>AI Diagnosis Results</CardTitle>
-                  <CardDescription>
-                    Based on the symptoms you described
-                  </CardDescription>
-                </div>
-                <Badge 
-                  className={
-                    diagnosisResult.urgency === "high" 
-                      ? "bg-health-red text-white" 
-                      : diagnosisResult.urgency === "medium" 
-                        ? "bg-health-orange text-white" 
-                        : "bg-health-green text-white"
-                  }
-                >
-                  {diagnosisResult.urgency === "high" 
-                    ? "High Urgency" 
-                    : diagnosisResult.urgency === "medium" 
-                      ? "Medium Urgency" 
-                      : "Low Urgency"
-                  }
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="pt-6">
-              <Tabs defaultValue="conditions">
-                <TabsList className="mb-4">
-                  <TabsTrigger value="conditions">Possible Conditions</TabsTrigger>
-                  <TabsTrigger value="risk">Risk Factors</TabsTrigger>
-                  <TabsTrigger value="steps">Recommended Steps</TabsTrigger>
-                </TabsList>
-                <TabsContent value="conditions">
-                  <div className="space-y-6">
-                    {diagnosisResult.possibleConditions.map((condition, index) => (
-                      <div key={index} className="border border-border rounded-lg p-4">
-                        <div className="flex justify-between items-center mb-2">
-                          <h3 className="text-lg font-medium">{condition.name}</h3>
-                          <div className="text-sm font-medium">
-                            Match: {condition.probability}%
-                          </div>
-                        </div>
-                        <Progress 
-                          value={condition.probability} 
-                          className={cn(
-                            "h-2 mb-4",
-                            condition.probability > 70 
-                              ? "bg-secondary [&>div]:bg-health-red" 
-                              : condition.probability > 40 
-                                ? "bg-secondary [&>div]:bg-health-orange" 
-                                : "bg-secondary [&>div]:bg-health-green"
-                          )}
-                        />
-                        <p className="text-sm text-muted-foreground mb-3">
-                          {condition.description}
-                        </p>
-                        <div className="mb-3">
-                          <h4 className="text-sm font-medium mb-2">Common Symptoms:</h4>
-                          <div className="flex flex-wrap gap-1">
-                            {condition.symptoms.map((symptom, i) => (
-                              <Badge key={i} variant="outline" className="bg-secondary/50">
-                                {symptom}
-                              </Badge>
-                            ))}
-                          </div>
-                        </div>
-                        <div>
-                          <h4 className="text-sm font-medium mb-1">Recommendation:</h4>
-                          <p className="text-sm text-muted-foreground">
-                            {condition.recommendation}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </TabsContent>
-                <TabsContent value="risk">
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <Card>
-                        <CardHeader className="pb-2">
-                          <CardTitle className="text-base">Age Factor</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <p className="text-sm text-muted-foreground">
-                            {diagnosisResult.riskFactors.age}
-                          </p>
-                        </CardContent>
-                      </Card>
-                      <Card>
-                        <CardHeader className="pb-2">
-                          <CardTitle className="text-base">Regional Factor</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <p className="text-sm text-muted-foreground">
-                            {diagnosisResult.riskFactors.region}
-                          </p>
-                        </CardContent>
-                      </Card>
-                      <Card>
-                        <CardHeader className="pb-2">
-                          <CardTitle className="text-base">Medical History</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <p className="text-sm text-muted-foreground">
-                            {diagnosisResult.riskFactors.medicalHistory}
-                          </p>
-                        </CardContent>
-                      </Card>
-                    </div>
-                    <div className="bg-secondary/30 rounded-lg p-4">
-                      <div className="flex items-center space-x-2">
-                        <Info size={18} />
-                        <h3 className="font-medium">Understanding Risk Factors</h3>
-                      </div>
-                      <p className="text-sm text-muted-foreground mt-2">
-                        Risk factors help our AI contextualize your symptoms based on your profile and location.
-                        For more accurate assessments, consider completing your health profile with age,
-                        medical history, and current location.
-                      </p>
-                    </div>
-                  </div>
-                </TabsContent>
-                <TabsContent value="steps">
-                  <div className="space-y-4">
-                    <div className="bg-secondary/30 rounded-lg p-4 mb-4">
-                      <div className="flex items-start space-x-2">
-                        <Clock size={18} className="mt-0.5" />
-                        <div>
-                          <h3 className="font-medium">Recommended Next Steps</h3>
-                          <p className="text-sm text-muted-foreground">
-                            Based on our AI analysis, here's what you should consider doing next
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                    <ul className="space-y-3">
-                      {diagnosisResult.nextSteps.map((step, index) => (
-                        <li key={index} className="flex items-start">
-                          <div className="bg-primary text-primary-foreground rounded-full w-6 h-6 flex items-center justify-center text-sm mr-3 mt-0.5">
-                            {index + 1}
-                          </div>
-                          <span>{step}</span>
-                        </li>
-                      ))}
-                    </ul>
-                    <div className="mt-6">
-                      <Button className="w-full sm:w-auto">
-                        Schedule Teleconsultation
-                      </Button>
-                    </div>
-                  </div>
-                </TabsContent>
-              </Tabs>
-            </CardContent>
-            <CardFooter className="bg-secondary/30 text-sm text-muted-foreground">
-              <div className="flex items-start space-x-2">
-                <AlertTriangle size={16} className="mt-0.5 shrink-0" />
-                <p>This AI assessment is for informational purposes only and does not constitute medical advice. Always consult with a healthcare professional for proper diagnosis and treatment.</p>
-              </div>
-            </CardFooter>
-          </Card>
-
-          <div className="mt-4 text-center">
-            <Button variant="link" onClick={() => setDiagnosisResult(null)}>
-              Clear results and start over
-            </Button>
+          </div>
+          <div className="mt-2 text-xs text-center text-muted-foreground flex items-center justify-center">
+            <HelpCircle className="h-3 w-3 mr-1" />
+            <span>For better results, include age, symptom duration, and severity</span>
           </div>
         </div>
-      )}
-      
-      <div className="mt-10 mb-6">
-        <h2 className="text-2xl font-bold mb-4">Frequently Asked Questions</h2>
-        <Accordion type="single" collapsible className="w-full">
-          <AccordionItem value="item-1">
-            <AccordionTrigger>How accurate is the AI symptom checker?</AccordionTrigger>
-            <AccordionContent>
-              Our AI symptom checker has been trained on extensive medical data and achieves approximately 85-90% accuracy in providing preliminary assessments. However, it's designed to be a supportive tool, not a replacement for professional medical diagnosis. Always consult with healthcare professionals for definitive diagnoses and treatment plans.
-            </AccordionContent>
-          </AccordionItem>
-          <AccordionItem value="item-2">
-            <AccordionTrigger>Is my health data secure and private?</AccordionTrigger>
-            <AccordionContent>
-              Yes, ArogyaAI+ takes data security and privacy very seriously. All your health data is encrypted using HIPAA-compliant standards. We never share your personal information with third parties without your explicit consent. You can review our comprehensive privacy policy for more details.
-            </AccordionContent>
-          </AccordionItem>
-          <AccordionItem value="item-3">
-            <AccordionTrigger>What languages are supported for the symptom checker?</AccordionTrigger>
-            <AccordionContent>
-              Currently, our symptom checker supports English, Hindi, Marathi, Tamil, Telugu, and Bengali. We're continuously working to add support for more regional languages to make healthcare more accessible to everyone across the country.
-            </AccordionContent>
-          </AccordionItem>
-          <AccordionItem value="item-4">
-            <AccordionTrigger>What should I do after receiving my AI assessment?</AccordionTrigger>
-            <AccordionContent>
-              After receiving your AI assessment, review the recommended next steps carefully. For conditions with medium to high urgency ratings, consider scheduling a teleconsultation with a healthcare professional through our platform. For low urgency conditions, follow the self-care recommendations and monitor your symptoms. If symptoms persist or worsen, consult with a healthcare provider.
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion>
       </div>
     </div>
   );
